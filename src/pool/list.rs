@@ -35,6 +35,11 @@ pub async fn list(
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(classify_stderr(&stderr, output.status.code()));
     }
+    // With no pools imported, `zpool list -j` exits 0 without printing any JSON
+    // (OpenZFS 2.4), unlike `zpool status -j` and `zfs list -j`.
+    if output.stdout.iter().all(u8::is_ascii_whitespace) {
+        return Ok(Vec::new());
+    }
     let parsed: ZpoolListOutput =
         serde_json::from_slice(&output.stdout).map_err(|e| ZfsError::Parse {
             command: "zpool list",
@@ -49,6 +54,19 @@ pub async fn list(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runner::RecordingRunner;
+
+    #[tokio::test]
+    async fn no_imported_pools_is_an_empty_list() {
+        let runner = RecordingRunner::new().record(
+            Cmd::new("zpool").args(["list", "-j", "-p"]),
+            vec![],
+            vec![],
+            0,
+        );
+        let pools = list(&runner, &ListOptions::default()).await.unwrap();
+        assert!(pools.is_empty());
+    }
 
     #[test]
     fn build_args_default() {
