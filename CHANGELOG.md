@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2] — 2026-09-23
+
+### Fixed
+
+- `Zfs::list_pools()` returns an empty list when no pool is imported. OpenZFS 2.4
+  `zpool list -j` prints no JSON in that case, which failed to parse.
+
 ## [0.2.1] — 2026-08-14
 
 ### Added
@@ -52,5 +59,6 @@ zfskit.
   handles; waiting closes untaken pipes to avoid deadlocks.
 - Send/receive stderr is drained concurrently to avoid pipe-buffer stalls.
 
+[0.2.2]: https://github.com/okhsunrog/zfskit/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/okhsunrog/zfskit/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/okhsunrog/zfskit/compare/7931a91...v0.2.0

@@ -1,6 +1,6 @@
 [package]
 name = "zfskit"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 rust-version = "1.85"
 description = "Async toolkit for OpenZFS: datasets, snapshots, send/recv streams, holds, bookmarks, pools - via the zfs/zpool CLI with JSON output"
