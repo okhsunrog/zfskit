@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] — 2026-10-06
 
 ### Added
 
@@ -23,10 +23,15 @@
 ### Changed
 
 - `ImportOptions` has additional public fields; existing struct literals should
-  use `..Default::default()`. Its `build_args` returns `Result<Vec<OsString>, ZfsError>`, rejects
-  incompatible `-l`/`-N` flags, and preserves non-UTF-8 search and alternate-root paths.
+  use `..Default::default()`. Its `build_args` returns
+  `Result<Vec<OsString>, ZfsError>`, rejects incompatible `-l`/`-N` flags, and
+  preserves non-UTF-8 search and alternate-root paths.
 - Dataset creation collisions now classify as `DatasetExists` instead of `Other`.
   Low-level import validates names and decimal GUID strings before execution.
+
+### Fixed
+
+- Clippy 1.99 compatibility for `async-trait`-generated `CommandRunner` methods.
 
 Advanced import rewind/recovery and missing-log modes remain deferred pending a
 separate explicit policy model.
@@ -90,6 +95,7 @@ zfskit.
   handles; waiting closes untaken pipes to avoid deadlocks.
 - Send/receive stderr is drained concurrently to avoid pipe-buffer stalls.
 
+[0.3.0]: https://github.com/okhsunrog/zfskit/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/okhsunrog/zfskit/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/okhsunrog/zfskit/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/okhsunrog/zfskit/compare/7931a91...v0.2.0
