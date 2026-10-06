@@ -32,6 +32,17 @@ pub enum ZfsError {
     #[error("dataset not found: {name}")]
     DatasetNotFound { name: String },
 
+    /// The entity named in a create/rename diagnostic. For rename, OpenZFS
+    /// names the source even though the destination is the existing dataset.
+    #[error("dataset already exists (operation on {name})")]
+    DatasetExists { name: String },
+
+    #[error("dataset is not a clone: {name}")]
+    NotClone { name: String },
+
+    #[error("multiple importable pools named {name}; import by GUID instead")]
+    AmbiguousPool { name: String },
+
     #[error("permission denied")]
     PermissionDenied,
 
@@ -117,7 +128,46 @@ fn pool_not_found_re() -> &'static Regex {
     })
 }
 
+fn dataset_exists_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| {
+        Regex::new(r"(?m)^cannot (?:create|rename) '([^']+)': dataset already exists\s*$")
+            .expect("dataset_exists regex compiles")
+    })
+}
+
+fn not_clone_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| {
+        Regex::new(r"(?m)^cannot promote '([^']+)': not a cloned filesystem\s*$")
+            .expect("not_clone regex compiles")
+    })
+}
+
+fn ambiguous_pool_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| {
+        Regex::new(r"(?m)^cannot import '([^']+)': more than one matching pool\s*$")
+            .expect("ambiguous_pool regex compiles")
+    })
+}
+
 pub fn classify_stderr(stderr: &str, exit_code: Option<i32>) -> ZfsError {
+    if let Some(caps) = dataset_exists_re().captures(stderr) {
+        return ZfsError::DatasetExists {
+            name: caps[1].to_string(),
+        };
+    }
+    if let Some(caps) = not_clone_re().captures(stderr) {
+        return ZfsError::NotClone {
+            name: caps[1].to_string(),
+        };
+    }
+    if let Some(caps) = ambiguous_pool_re().captures(stderr) {
+        return ZfsError::AmbiguousPool {
+            name: caps[1].to_string(),
+        };
+    }
     if let Some(caps) = pool_not_found_re().captures(stderr) {
         return ZfsError::PoolNotFound {
             name: caps[1].to_string(),

@@ -108,6 +108,46 @@ impl Zfs {
         crate::pool::discover(&*self.runner).await
     }
 
+    /// Discover importable pools using a configured search source.
+    pub async fn discover_importable_pools_with(
+        &self,
+        opts: &crate::pool::DiscoverOptions,
+    ) -> Result<Vec<DiscoveredPool>, ZfsError> {
+        crate::pool::discover_with(&*self.runner, opts).await
+    }
+
+    /// Import a discovered pool by GUID, returning a handle with its exported
+    /// name. Invalid names or IDs fail before execution. The caller must pass
+    /// the desired search source again; discovery does not store it in the pool.
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), zfskit::ZfsError> {
+    /// use zfskit::pool::{DiscoverOptions, ImportOptions, PoolSearchSource};
+    /// let zfs = zfskit::Zfs::new();
+    /// let source = PoolSearchSource::Directories(vec!["/dev/disk/by-id".into()]);
+    /// let pools = zfs.discover_importable_pools_with(
+    ///     &DiscoverOptions::new().search_source(source.clone()),
+    /// ).await?;
+    /// for discovered in pools {
+    ///     let pool = zfs.import_pool(&discovered,
+    ///         &ImportOptions::new().no_mount().readonly()
+    ///             .search_source(source.clone()),
+    ///     ).await?;
+    ///     pool.export(&Default::default()).await?;
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn import_pool(
+        &self,
+        discovered: &DiscoveredPool,
+        opts: &ImportOptions,
+    ) -> Result<Pool, ZfsError> {
+        let pool = self.pool(discovered.name.clone())?;
+        crate::pool::import_by_guid(&*self.runner, discovered.guid()?, opts).await?;
+        Ok(pool)
+    }
+
     /// Create a new pool. Returns a [`Pool`] handle to the just-created pool.
     pub async fn create_pool(&self, opts: &PoolCreateOptions) -> Result<Pool, ZfsError> {
         crate::pool::create(&*self.runner, opts).await?;
@@ -317,6 +357,27 @@ impl Dataset {
         self.name.as_str()
     }
 
+    /// Rename this dataset and return its new handle. Consumes the old handle
+    /// even on failure; existing cloned handles and descendant/snapshot handles
+    /// are not updated and must be reacquired after success.
+    pub async fn rename(
+        self,
+        destination: impl Into<String>,
+        opts: &crate::dataset::RenameOptions,
+    ) -> Result<Self, ZfsError> {
+        let name = DatasetName::parse(destination)?;
+        crate::dataset::rename(&*self.runner, self.name.as_str(), name.as_str(), opts).await?;
+        Ok(Self {
+            runner: self.runner,
+            name,
+        })
+    }
+
+    /// Reverse a clone's origin dependency via `zfs promote`.
+    pub async fn promote(&self) -> Result<(), ZfsError> {
+        crate::dataset::promote(&*self.runner, self.name.as_str()).await
+    }
+
     /// Read multiple properties via `zfs get -j`. The `datasets` field of
     /// `opts` is overridden with this handle's name.
     pub async fn get(&self, opts: &GetOptions) -> Result<Vec<ZfsGetEntry>, ZfsError> {
@@ -481,6 +542,54 @@ pub struct Snapshot {
 impl Snapshot {
     pub fn name(&self) -> &str {
         self.name.as_str()
+    }
+
+    /// Clone this snapshot to a validated absolute dataset name. With `-p`,
+    /// ZFS also succeeds when the destination already exists; the returned
+    /// handle then refers to that existing dataset without verifying its origin.
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), zfskit::ZfsError> {
+    /// use zfskit::dataset::{CloneOptions, RenameOptions};
+    /// let zfs = zfskit::Zfs::new();
+    /// let snapshot = zfs.snapshot("tank/data@before")?;
+    /// let clone = snapshot.clone_as(
+    ///     "tank/copies/test",
+    ///     &CloneOptions::new().parents().property("mountpoint", "none"),
+    /// ).await?;
+    /// let clone = clone.rename("tank/copies/current", &RenameOptions::new()).await?;
+    /// clone.promote().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn clone_as(
+        &self,
+        destination: impl Into<String>,
+        opts: &crate::dataset::CloneOptions,
+    ) -> Result<Dataset, ZfsError> {
+        let name = DatasetName::parse(destination)?;
+        crate::dataset::clone(&*self.runner, self.name.as_str(), name.as_str(), opts).await?;
+        Ok(Dataset {
+            runner: self.runner.clone(),
+            name,
+        })
+    }
+
+    /// Rename to a new snapshot tag within this dataset, consuming the old
+    /// handle even on failure. Recursive rename can invalidate other handles;
+    /// no previously cloned handles are updated automatically.
+    pub async fn rename(
+        self,
+        tag: &str,
+        opts: &crate::dataset::SnapshotRenameOptions,
+    ) -> Result<Self, ZfsError> {
+        let name = SnapshotName::new(self.name.dataset().clone(), tag)?;
+        crate::dataset::rename_snapshot(&*self.runner, self.name.as_str(), name.as_str(), opts)
+            .await?;
+        Ok(Self {
+            runner: self.runner,
+            name,
+        })
     }
 
     pub async fn exists(&self) -> Result<bool, ZfsError> {

@@ -1,5 +1,36 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Generic `zfs clone`, dataset/snapshot rename, and clone promotion free functions
+  and entity-handle methods. Rename consumes the old handle and returns its new
+  name; recursive snapshot rename has separate options.
+- `CloneOptions`, `RenameOptions`, and `SnapshotRenameOptions` with builders,
+  name validation, and validation of incompatible dataset rename flags.
+- Import-time pool properties, readonly and key-loading builders, and shared
+  `PoolSearchSource` options for directory/device or cachefile searches.
+- Configurable discovery through `DiscoverOptions` and
+  `Zfs::discover_importable_pools_with`, preserving default discovery behavior.
+- Unsigned GUID import through `pool::import_by_guid` and `Zfs::import_pool`;
+  `DiscoveredPool::guid()` validates the existing string ID without changing it.
+- `DatasetExists`, `NotClone`, and `AmbiguousPool` errors based on captured
+  OpenZFS 2.4.4 stderr fixtures.
+- RecordingRunner coverage and SSH/QEMU integration tests for dataset lifecycle,
+  discovery/import sources, GUID/readonly imports, and file-based key loading.
+
+### Changed
+
+- `ImportOptions` has additional public fields; existing struct literals should
+  use `..Default::default()`. Its `build_args` returns `Result<Vec<OsString>, ZfsError>`, rejects
+  incompatible `-l`/`-N` flags, and preserves non-UTF-8 search and alternate-root paths.
+- Dataset creation collisions now classify as `DatasetExists` instead of `Other`.
+  Low-level import validates names and decimal GUID strings before execution.
+
+Advanced import rewind/recovery and missing-log modes remain deferred pending a
+separate explicit policy model.
+
 ## [0.2.2] — 2026-09-23
 
 ### Fixed

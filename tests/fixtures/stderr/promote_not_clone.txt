@@ -1,0 +1,1 @@
+cannot promote 'zfskit_test_diagnostics/data': not a cloned filesystem

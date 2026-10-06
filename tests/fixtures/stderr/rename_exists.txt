@@ -1,0 +1,1 @@
+cannot rename 'zfskit_test_diagnostics/clone': dataset already exists

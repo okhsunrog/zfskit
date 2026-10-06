@@ -67,7 +67,7 @@ async fn create_with_properties_emits_dash_o_pairs() {
 }
 
 #[tokio::test]
-async fn create_propagates_other_error_for_existing() {
+async fn create_classifies_existing_dataset() {
     let runner = RecordingRunner::new().record(
         Cmd::new("zfs").args(["create", "tank/data"]),
         vec![],
@@ -77,8 +77,8 @@ async fn create_propagates_other_error_for_existing() {
     let err = create(&runner, "tank/data", &CreateOptions::new())
         .await
         .expect_err("already-exists should error");
-    let ZfsError::Other { stderr, .. } = err else {
-        panic!("expected Other, got {err:?}");
+    let ZfsError::DatasetExists { name } = err else {
+        panic!("expected DatasetExists, got {err:?}");
     };
-    assert!(stderr.contains("already exists"));
+    assert_eq!(name, "tank/data");
 }

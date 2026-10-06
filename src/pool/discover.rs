@@ -20,6 +20,9 @@
 //! (often to stderr, with a non-zero exit code). Our `discover()` combines
 //! stdout+stderr because OpenZFS isn't always consistent about which stream
 //! the pool list lands on, mirroring archinstall_zfs's prior behavior.
+use std::ffi::OsString;
+
+use super::PoolSearchSource;
 use crate::error::{ZfsError, classify_stderr};
 use crate::runner::{Cmd, CommandRunner};
 
@@ -33,6 +36,45 @@ pub struct DiscoveredPool {
     pub state: String,
     /// First line of the `status:` field, when present. Absent for ONLINE pools.
     pub status: Option<String>,
+}
+
+impl DiscoveredPool {
+    /// Parse the discovery ID as an unsigned 64-bit GUID. The tolerant text
+    /// parser retains the original string; malformed/missing IDs fail here.
+    pub fn guid(&self) -> Result<u64, ZfsError> {
+        if self.id.is_empty() || !self.id.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(ZfsError::InvalidInput {
+                message: format!("invalid pool GUID: {:?}", self.id),
+            });
+        }
+        self.id.parse().map_err(|_| ZfsError::InvalidInput {
+            message: format!("pool GUID exceeds u64: {:?}", self.id),
+        })
+    }
+}
+
+/// Options for discovering importable pools without importing them.
+#[derive(Default, Clone, Debug)]
+pub struct DiscoverOptions {
+    /// Device/directory scan or configuration-cache lookup.
+    pub search_source: PoolSearchSource,
+}
+
+impl DiscoverOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn search_source(mut self, source: PoolSearchSource) -> Self {
+        self.search_source = source;
+        self
+    }
+
+    pub fn build_args(&self) -> Vec<OsString> {
+        let mut args = vec!["import".into()];
+        self.search_source.append_args(&mut args);
+        args
+    }
 }
 
 /// Pure parser: takes the combined stdout+stderr of `zpool import` (no args)
@@ -82,7 +124,18 @@ pub fn parse_discovery(text: &str) -> Vec<DiscoveredPool> {
 /// non-zero "no pools available to import" exit). True execution failures
 /// (failing to spawn `zpool`) propagate as `ZfsError::Spawn`.
 pub async fn discover(runner: &dyn CommandRunner) -> Result<Vec<DiscoveredPool>, ZfsError> {
-    let output = runner.run(Cmd::new("zpool").arg("import")).await?;
+    discover_with(runner, &DiscoverOptions::default()).await
+}
+
+/// Discover using directory/device search or a configuration cache. Output
+/// parsing and no-pools/error handling are identical to [`discover`].
+pub async fn discover_with(
+    runner: &dyn CommandRunner,
+    opts: &DiscoverOptions,
+) -> Result<Vec<DiscoveredPool>, ZfsError> {
+    let output = runner
+        .run(Cmd::new("zpool").args(opts.build_args()))
+        .await?;
     let combined = format!(
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
