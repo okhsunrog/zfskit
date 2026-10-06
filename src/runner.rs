@@ -221,6 +221,9 @@ fn mock_exit_status(code: i32) -> ExitStatus {
     ExitStatus::from_raw((code & 0xff) << 8)
 }
 
+// async-trait adds #[must_use] to methods returning an already-must-use
+// boxed Future; Clippy 1.99 diagnoses these generated attributes.
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 pub trait CommandRunner: Send + Sync {
     async fn run(&self, cmd: Cmd) -> Result<Output, io::Error>;
